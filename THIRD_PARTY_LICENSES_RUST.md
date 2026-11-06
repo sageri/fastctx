@@ -1967,7 +1967,6 @@ Used by:
 Used by:
 
 - [sys-locale 0.3.2](https://github.com/1Password/sys-locale)
-- [ureq 2.12.1](https://github.com/algesten/ureq)
 - [zune-core 0.5.1](https://github.com/etemesi254/zune-image)
 - [zune-jpeg 0.5.15](https://github.com/etemesi254/zune-image/tree/dev/crates/zune-jpeg)
 
@@ -4389,6 +4388,7 @@ Used by:
 - [unicode-segmentation 1.13.3](https://github.com/unicode-rs/unicode-segmentation)
 - [unicode-truncate 2.0.1](https://github.com/Aetf/unicode-truncate)
 - [unicode-width 0.2.0](https://github.com/unicode-rs/unicode-width)
+- [ureq 2.12.1](https://github.com/algesten/ureq)
 - [url 2.5.8](https://github.com/servo/rust-url)
 - [utf16string 0.2.0](https://github.com/getsentry/utf16string)
 - [version_check 0.9.5](https://github.com/SergioBenitez/version_check)
