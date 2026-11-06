@@ -297,14 +297,14 @@ impl<R> RequestSpecShared<R> {
         (vacancies > 0).then_some((state.generation, vacancies))
     }
 
-        // fetch_update was renamed try_update in a stable newer than the 1.88
-        // MSRV; allow the deprecated name until the MSRV moves past it.
-        #[allow(deprecated)]
-        fn try_claim(
-            self: &Arc<Self>,
-            generation: u64,
-            permit: BurstPermit,
-        ) -> Option<RunningLease<R>> {
+    // fetch_update was renamed try_update in a stable newer than the 1.88
+    // MSRV; allow the deprecated name until the MSRV moves past it.
+    #[allow(deprecated)]
+    fn try_claim(
+        self: &Arc<Self>,
+        generation: u64,
+        permit: BurstPermit,
+    ) -> Option<RunningLease<R>> {
         let runner_id = self
             .next_runner_id
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
