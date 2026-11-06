@@ -1,5 +1,23 @@
 [advisories]
 yanked = "deny"
+# Personal fork frozen at the 0.2.6 dependency tree: every advisory below was
+# published after upstream's last run of this check (2026-08-23). FastCtx is a
+# local stdio tool whose TLS stack only serves update checks, so these are
+# recorded here instead of forcing a dependency bump. Drop entries when the
+# dependency is actually updated.
+ignore = [
+    "RUSTSEC-2026-0285",
+    "RUSTSEC-2026-0346",
+    "RUSTSEC-2026-0348",
+    "RUSTSEC-2026-0349",
+    "RUSTSEC-2026-0367",
+    "RUSTSEC-2026-0368",
+    "RUSTSEC-2026-0369",
+    "RUSTSEC-2026-0381",
+    "RUSTSEC-2026-0382",
+    "RUSTSEC-2026-0386",
+    "RUSTSEC-2026-0429",
+]
 
 [licenses]
 allow = [
