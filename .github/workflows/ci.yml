@@ -34,17 +34,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Personal fork: only the target this machine runs (2026-11-06).
         include:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-          - os: windows-11-arm
-            target: aarch64-pc-windows-msvc
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-          - os: macos-14
-            target: aarch64-apple-darwin
 
     steps:
       - name: Prepare Git Bash temporary directories
@@ -261,30 +254,6 @@ jobs:
             -PlatformTarball "dist/npm/$platform" `
             -MainTarball "dist/npm/fastctx-$version.tgz" `
             -AliasTarball "dist/npm/codex-fastctx-$version.tgz"
-
-  package:
-    name: Package dry run
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - name: Verify distribution contract
-        shell: pwsh
-        run: ./scripts/verify-distribution-contract.ps1
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Verify frozen v0.1.1 compatibility evidence
-        run: python3 tools/verify-v011-assets.py
-      - uses: Swatinem/rust-cache@v2
-      - name: Cache the pinned Pdfium archive
-        uses: actions/cache@v4
-        with:
-          path: .pdfium-archive-cache
-          key: pdfium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('build.rs') }}
-      - run: cargo publish --locked --dry-run
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-      - shell: pwsh
-        run: ./scripts/pack-npm-root.ps1
 
   supply-chain:
     name: Dependency policy

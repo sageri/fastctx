@@ -5,12 +5,9 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $directory = Join-Path $root $ReleaseDirectory
+# Personal fork: Windows x64 only (2026-11-06).
 $expectedArchives = @(
-    "fastctx-x86_64-pc-windows-msvc.zip",
-    "fastctx-aarch64-pc-windows-msvc.zip",
-    "fastctx-x86_64-unknown-linux-gnu.tar.gz",
-    "fastctx-x86_64-apple-darwin.tar.gz",
-    "fastctx-aarch64-apple-darwin.tar.gz"
+    "fastctx-x86_64-pc-windows-msvc.zip"
 )
 
 if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
