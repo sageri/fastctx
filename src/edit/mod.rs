@@ -20,6 +20,8 @@ pub struct ReplaceRequest {
     /// The regular expression to replace (Rust regex; escape literal braces).
     pub pattern: String,
     /// Replacement text; $1/${name} reference groups, $$ is a literal $, empty deletes the match.
+    /// Use actual newline characters for multiline replacement; backslash sequences are not unescaped.
+    /// In JSON, "a\nb" inserts a line break; "a\\nb" writes a literal backslash+n.
     pub replacement: String,
     /// File or directory to edit.
     #[schemars(description = crate::model_guidance::local_path_description(
