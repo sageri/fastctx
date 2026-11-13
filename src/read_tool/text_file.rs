@@ -41,7 +41,9 @@ pub(super) fn read_text_file(
         Err(error) => return ToolResponse::error(io_error_message(path, &error)),
     };
     if validated.total_lines == 0 {
-        return ToolResponse::text("Warning: the file exists but is empty.");
+        return ToolResponse::text(
+            "Warning: the file exists but is empty.\n\n(Complete: empty file.)",
+        );
     }
     let transcoding_note = validated.transcoding_note();
 
