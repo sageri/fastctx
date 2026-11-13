@@ -331,7 +331,7 @@ impl McpSession {
         self.await_response(id)
     }
 
-    fn notify(&mut self, method: &str, params: Value) {
+    pub fn notify(&mut self, method: &str, params: Value) {
         self.send(serde_json::json!({
             "jsonrpc": "2.0",
             "method": method,

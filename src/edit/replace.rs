@@ -1,5 +1,6 @@
 //! Two-pass batch replacement with full blast-radius counting and per-file CAS commits.
 
+use super::control::{lock, stop_reason, stopped_response};
 use super::document::TextDocument;
 use super::locks::{FilePathLock, PathIdentity};
 use super::{ReplaceRequest, ReplaceService, edit_token_budget, plural};
@@ -8,6 +9,7 @@ use crate::budget::{
 };
 use crate::glob_filter::{GlobPatterns, PathGlobFilter};
 use crate::model::ToolResponse;
+use crate::operation::OperationCtx;
 use crate::skip_report::{SkipTally, terminal_with_skips};
 use regex::{Captures, Regex, RegexBuilder};
 use std::collections::BTreeMap;
@@ -51,7 +53,11 @@ pub(super) fn replace(
     editor: &ReplaceService,
     request: ReplaceRequest,
     max_file_size_mib: u64,
+    operation: &OperationCtx,
 ) -> ToolResponse {
+    if operation.check().is_err() {
+        return stopped_response(operation);
+    }
     let budget = match edit_token_budget() {
         Ok(budget) => budget,
         Err(error) => return ToolResponse::error(error),
@@ -103,8 +109,14 @@ pub(super) fn replace(
         Ok(glob) => glob,
         Err(error) => return ToolResponse::error(error),
     };
-    let collected = match crate::traversal::collect_project_candidates(&root, glob.as_ref(), None) {
+    let collected = match crate::traversal::collect_project_candidates(
+        &root,
+        glob.as_ref(),
+        None,
+        Some(operation),
+    ) {
         Ok(collected) => collected,
+        Err(_) if operation.check().is_err() => return stopped_response(operation),
         Err(error) => return ToolResponse::error(error),
     };
     // Paths the walk never entered hide an unknown number of files. For a tool
@@ -138,6 +150,11 @@ pub(super) fn replace(
         .saturating_add(32)
         .clamp(1, MAX_STORED_PREVIEWS);
     for candidate in candidates {
+        #[cfg(test)]
+        operation.stage(crate::operation::TestStage::CandidateValidation);
+        if operation.check().is_err() {
+            return stopped_response(operation);
+        }
         let opened = open_candidate(
             &candidate.display,
             request.encoding.as_deref(),
@@ -209,15 +226,31 @@ pub(super) fn replace(
         {
             continue;
         }
-        let analysis = analyze_file(&document, &regex, &request.replacement, preview_slots);
+        let analysis = match analyze_file(
+            &document,
+            &regex,
+            &request.replacement,
+            preview_slots,
+            operation,
+        ) {
+            Ok(analysis) => analysis,
+            Err(_) => return stopped_response(operation),
+        };
         preview_slots = preview_slots.saturating_sub(analysis.previews.len());
         total_matches = total_matches.saturating_add(analysis.matches);
         if analysis.matches == 0 {
             continue;
         }
-        if let Err(message) =
-            validate_replacement(&document, &regex, &request.replacement, max_file_size_mib)
-        {
+        if let Err(message) = validate_replacement(
+            &document,
+            &regex,
+            &request.replacement,
+            max_file_size_mib,
+            operation,
+        ) {
+            if operation.check().is_err() {
+                return stopped_response(operation);
+            }
             if single_file {
                 return ToolResponse::error(message);
             }
@@ -239,6 +272,9 @@ pub(super) fn replace(
         });
     }
 
+    if operation.check().is_err() {
+        return stopped_response(operation);
+    }
     if let Some(maximum) = request.max_replacements
         && total_matches > maximum
     {
@@ -266,7 +302,6 @@ pub(super) fn replace(
 
     let mut successes = Vec::new();
     let mut failures = planning_failures;
-    let mut written_replacements = 0_usize;
     let mut ordered = analyzed.iter().enumerate().collect::<Vec<_>>();
     ordered.sort_by(|(_, left), (_, right)| {
         left.identity
@@ -274,31 +309,47 @@ pub(super) fn replace(
             .then_with(|| left.path.as_bytes().cmp(right.path.as_bytes()))
     });
     for (original_index, file) in ordered {
+        if operation.check().is_err() {
+            break;
+        }
         let path = Path::new(&file.path);
         let name_process_lock = editor.path_locks.for_identity(&file.name_identity);
-        let _name_process_guard = name_process_lock.lock().unwrap();
-        let _name_file_guard = match FilePathLock::acquire(&file.name_identity, path) {
+        let _name_process_guard = match lock(&name_process_lock, operation) {
             Ok(guard) => guard,
-            Err(error) => {
-                failures.push(Issue {
-                    path: file.path.clone(),
-                    message: error,
-                });
-                continue;
-            }
+            Err(_) => break,
         };
+        let _name_file_guard =
+            match FilePathLock::acquire_cancellable(&file.name_identity, path, operation) {
+                Ok(guard) => guard,
+                Err(_) if operation.check().is_err() => break,
+                Err(error) => {
+                    failures.push(Issue {
+                        path: file.path.clone(),
+                        message: error,
+                    });
+                    continue;
+                }
+            };
         let target_process_lock = editor.path_locks.for_identity(&file.identity);
-        let _target_process_guard = target_process_lock.lock().unwrap();
-        let _target_file_guard = match FilePathLock::acquire(&file.identity, path) {
+        let _target_process_guard = match lock(&target_process_lock, operation) {
             Ok(guard) => guard,
-            Err(error) => {
-                failures.push(Issue {
-                    path: file.path.clone(),
-                    message: error,
-                });
-                continue;
-            }
+            Err(_) => break,
         };
+        let _target_file_guard =
+            match FilePathLock::acquire_cancellable(&file.identity, path, operation) {
+                Ok(guard) => guard,
+                Err(_) if operation.check().is_err() => break,
+                Err(error) => {
+                    failures.push(Issue {
+                        path: file.path.clone(),
+                        message: error,
+                    });
+                    continue;
+                }
+            };
+        if operation.check().is_err() {
+            break;
+        }
         let document = match TextDocument::open(
             &file.path,
             if single_file {
@@ -349,17 +400,23 @@ pub(super) fn replace(
             });
             continue;
         }
-        let built =
-            match build_replacement(&document, &regex, &request.replacement, max_file_size_mib) {
-                Ok(built) => built,
-                Err(error) => {
-                    failures.push(Issue {
-                        path: file.path.clone(),
-                        message: error,
-                    });
-                    continue;
-                }
-            };
+        let built = match build_replacement(
+            &document,
+            &regex,
+            &request.replacement,
+            max_file_size_mib,
+            operation,
+        ) {
+            Ok(built) => built,
+            Err(_) if operation.check().is_err() => break,
+            Err(error) => {
+                failures.push(Issue {
+                    path: file.path.clone(),
+                    message: error,
+                });
+                continue;
+            }
+        };
         if built.matches != file.matches {
             failures.push(Issue {
                 path: file.path.clone(),
@@ -370,15 +427,16 @@ pub(super) fn replace(
             });
             continue;
         }
+        if operation.check().is_err() {
+            break;
+        }
         if built.bytes == document.original_bytes() {
             successes.push((original_index, file.path.clone(), built.matches));
-            written_replacements = written_replacements.saturating_add(built.matches);
             continue;
         }
         match document.commit(&built.bytes) {
             Ok(()) => {
                 successes.push((original_index, file.path.clone(), built.matches));
-                written_replacements = written_replacements.saturating_add(built.matches);
             }
             Err(error) => failures.push(Issue {
                 path: file.path.clone(),
@@ -404,9 +462,9 @@ pub(super) fn replace(
         &skipped,
         &failures,
         unreachable,
-        written_replacements,
         budget,
         &fallback_note(&analyzed, fallback_label),
+        stop_reason(operation),
     )
 }
 
@@ -420,10 +478,14 @@ fn analyze_file(
     regex: &Regex,
     replacement: &str,
     preview_limit: usize,
-) -> FileAnalysis {
+    operation: &OperationCtx,
+) -> Result<FileAnalysis, String> {
     let mut matches = 0_usize;
     let mut previews = Vec::new();
     for captures in regex.captures_iter(document.logical_text()) {
+        operation
+            .check()
+            .map_err(|_| "Request stopped.".to_string())?;
         let matched = captures.get(0).expect("every capture set has group zero");
         let expanded = expand(&captures, replacement);
         if matched.start() == matched.end() && expanded.is_empty() {
@@ -443,7 +505,10 @@ fn analyze_file(
             ));
         }
     }
-    FileAnalysis { matches, previews }
+    operation
+        .check()
+        .map_err(|_| "Request stopped.".to_string())?;
+    Ok(FileAnalysis { matches, previews })
 }
 
 struct BuiltReplacement {
@@ -491,8 +556,17 @@ fn validate_replacement(
     regex: &Regex,
     replacement: &str,
     max_result_size_mib: u64,
+    operation: &OperationCtx,
 ) -> Result<(), String> {
-    process_replacement(document, regex, replacement, max_result_size_mib, false).map(drop)
+    process_replacement(
+        document,
+        regex,
+        replacement,
+        max_result_size_mib,
+        false,
+        operation,
+    )
+    .map(drop)
 }
 
 fn build_replacement(
@@ -500,9 +574,16 @@ fn build_replacement(
     regex: &Regex,
     replacement: &str,
     max_result_size_mib: u64,
+    operation: &OperationCtx,
 ) -> Result<BuiltReplacement, String> {
-    let (output, matches) =
-        process_replacement(document, regex, replacement, max_result_size_mib, true)?;
+    let (output, matches) = process_replacement(
+        document,
+        regex,
+        replacement,
+        max_result_size_mib,
+        true,
+        operation,
+    )?;
     Ok(BuiltReplacement {
         bytes: output
             .bytes
@@ -517,7 +598,11 @@ fn process_replacement(
     replacement: &str,
     max_result_size_mib: u64,
     materialize: bool,
+    operation: &OperationCtx,
 ) -> Result<(ReplacementOutput, usize), String> {
+    operation
+        .check()
+        .map_err(|_| "Request stopped.".to_string())?;
     let mut output = ReplacementOutput::new(document.original_bytes().len(), materialize);
     let mut previous_raw = 0_usize;
     let mut previous_logical = 0_usize;
@@ -525,6 +610,9 @@ fn process_replacement(
     let mut result_ends_newline = false;
     let mut raw_cursor = document.raw_offset_cursor()?;
     for captures in regex.captures_iter(document.logical_text()) {
+        operation
+            .check()
+            .map_err(|_| "Request stopped.".to_string())?;
         let matched = captures.get(0).expect("every capture set has group zero");
         let expanded = expand(&captures, replacement);
         if matched.start() == matched.end() && expanded.is_empty() {
@@ -827,10 +915,13 @@ fn format_apply(
     skipped: &[Issue],
     failures: &[Issue],
     unreachable: Unreachable<'_>,
-    replacements: usize,
     budget: usize,
     extra_notes: &[String],
+    stopped: Option<&str>,
 ) -> ToolResponse {
+    let replacements = successes
+        .iter()
+        .fold(0_usize, |total, (_, count)| total.saturating_add(*count));
     let mut groups = successes
         .iter()
         .map(|(path, count)| ReportGroup {
@@ -843,7 +934,14 @@ fn format_apply(
     groups.extend(issue_groups(skipped, "skipped"));
     groups.extend(issue_groups(failures, "failed"));
     groups.extend(issue_groups(unreachable.issues, "unreachable"));
-    let terminal = if replacements == 0 && failures.is_empty() {
+    let terminal = if let Some(reason) = stopped {
+        format!(
+            "(Partial: {reason}; {replacements} {} written in {} {}. Verify actual file contents before retrying.)",
+            plural(replacements, "replacement", "replacements"),
+            successes.len(),
+            plural(successes.len(), "file", "files")
+        )
+    } else if replacements == 0 && failures.is_empty() {
         "(Complete: no matches found; nothing written.)".to_string()
     } else if failures.is_empty() {
         format!(

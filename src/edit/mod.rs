@@ -1,5 +1,6 @@
 //! Byte-preserving batch replacement with optimistic and cross-process write protection.
 
+pub(crate) mod control;
 mod document;
 mod locks;
 pub(crate) mod private_storage;
@@ -99,7 +100,22 @@ impl ReplaceService {
         request: ReplaceRequest,
         max_file_size_mib: u64,
     ) -> ToolResponse {
-        replace::replace(self, request, max_file_size_mib)
+        let (_guard, operation) = crate::operation::RequestWorkGuard::new(
+            rmcp::model::RequestId::Number(0),
+            tokio_util::sync::CancellationToken::new(),
+        );
+        let operation =
+            operation.with_deadline(std::time::Instant::now() + control::REPLACE_TIMEOUT);
+        self.replace_with_operation(request, max_file_size_mib, &operation)
+    }
+
+    pub(crate) fn replace_with_operation(
+        &self,
+        request: ReplaceRequest,
+        max_file_size_mib: u64,
+        operation: &crate::operation::OperationCtx,
+    ) -> ToolResponse {
+        replace::replace(self, request, max_file_size_mib, operation)
     }
 }
 
@@ -118,9 +134,42 @@ fn plural<'a>(count: usize, singular: &'a str, plural: &'a str) -> &'a str {
 }
 
 #[cfg(test)]
+mod cancellation_tests;
+
+#[cfg(test)]
 mod tests {
     use super::{ReplaceRequest, ReplaceService};
     use crate::edit::document::set_before_commit_hook;
+
+    #[test]
+    #[ignore = "waits for the production 60-second deadline"]
+    fn replace_stops_after_deadline_without_writing_the_next_file() {
+        let temp = tempfile::tempdir().unwrap();
+        for name in ["a.txt", "b.txt"] {
+            std::fs::write(temp.path().join(name), b"old\n").unwrap();
+        }
+        set_before_commit_hook(|_| {
+            std::thread::sleep(std::time::Duration::from_secs(61));
+        });
+        let started = std::time::Instant::now();
+        let response = ReplaceService::new().replace(request(temp.path(), "old", "new"));
+        let bytes = ["a.txt", "b.txt"].map(|name| std::fs::read(temp.path().join(name)).unwrap());
+        let written = bytes
+            .iter()
+            .filter(|bytes| bytes.as_slice() == b"new\n")
+            .count();
+        eprintln!(
+            "input: a.txt=b\"old\\n\", b.txt=b\"old\\n\", old -> new; first commit delayed 61 seconds"
+        );
+        eprintln!(
+            "elapsed={:?}; disk={bytes:?}; written={written}; response={response:?}",
+            started.elapsed()
+        );
+        assert_eq!(written, 1, "only the in-flight atomic commit may complete");
+        assert!(response_text(&response).contains("Partial:"));
+        assert!(response_text(&response).contains("timed out after 60 seconds"));
+        assert!(response_text(&response).contains("1 replacement written in 1 file"));
+    }
 
     fn response_text(response: &crate::ToolResponse) -> &str {
         match response.content.as_slice() {

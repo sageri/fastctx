@@ -408,7 +408,11 @@ fn shell_and_replace_tool_descriptions_and_schemas_match_the_frozen_contract() {
             "Respects .gitignore; skips .git and binaries; files whose encoding cannot\n",
             "be determined are skipped and listed. Each file is written atomically with\n",
             "a concurrent-modification check, preserving its original encoding, BOM, and\n",
-            "line endings. The last line states Complete or Partial."
+            "line endings. Stops cooperatively after 60 seconds including queue time, or\n",
+            "on cancellation. An in-flight atomic commit or blocking I/O may finish later;\n",
+            "completed writes remain. After a timeout, verify actual file contents with\n",
+            "grep or inspect_local_file before retrying. Serialize replacements on the same directory.\n",
+            "The last line states Complete or Partial."
         ))
     );
 
