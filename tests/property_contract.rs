@@ -300,7 +300,10 @@ fn batch_read_continuation_chain_matches_independent_per_file_line_oracles() {
         let mut calls = 0;
         loop {
             calls += 1;
-            assert!(calls <= 3, "continuation did not converge");
+            assert!(
+                calls <= 31_usize.div_ceil(page_width),
+                "continuation did not converge"
+            );
             let requested_paths = pending
                 .iter()
                 .map(|entry| entry.path.clone())
@@ -352,6 +355,7 @@ fn batch_read_continuation_chain_matches_independent_per_file_line_oracles() {
             pending = serde_json::from_str(json).unwrap();
         }
 
+        assert_eq!(calls, 31_usize.div_ceil(page_width));
         for (path, expected) in &fixtures {
             let delivered = actual.remove(&normalized(path)).unwrap();
             assert_eq!(
