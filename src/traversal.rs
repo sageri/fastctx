@@ -244,11 +244,12 @@ pub(crate) fn collect_project_candidates(
     root: &Path,
     glob: Option<&PathGlobFilter>,
     file_type: Option<&str>,
+    operation: Option<&OperationCtx>,
 ) -> Result<TraversalCollection<ProjectCandidate>, String> {
     let metadata =
         fs::metadata(root).map_err(|error| crate::paths::io_error_message(root, &error))?;
     let resolved = ResolvedRoot::from_metadata(root.to_path_buf(), metadata)?;
-    collect_search_candidates(&resolved, glob, file_type, None, None).map(|collected| {
+    collect_search_candidates(&resolved, glob, file_type, operation, None).map(|collected| {
         TraversalCollection {
             items: collected
                 .items

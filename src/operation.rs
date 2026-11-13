@@ -40,6 +40,7 @@ impl RequestWorkGuard {
         let operation = OperationCtx {
             request_id,
             state: Arc::clone(&state),
+            deadline: None,
             #[cfg(test)]
             stage_hook,
         };
@@ -74,6 +75,7 @@ impl Drop for RequestWorkGuard {
 pub(crate) struct OperationCtx {
     request_id: RequestId,
     state: Arc<CancelOnDropState>,
+    deadline: Option<std::time::Instant>,
     #[cfg(test)]
     stage_hook: Option<TestStageHook>,
 }
@@ -81,11 +83,25 @@ pub(crate) struct OperationCtx {
 impl OperationCtx {
     /// Returns an error after the MCP request or its async wrapper is cancelled.
     pub(crate) fn check(&self) -> Result<(), OpError> {
-        if self.state.cancel.is_cancelled() {
+        if self.state.cancel.is_cancelled() || self.timed_out() {
             Err(OpError::Cancelled)
         } else {
             Ok(())
         }
+    }
+
+    pub(crate) fn with_deadline(mut self, deadline: std::time::Instant) -> Self {
+        self.deadline = Some(deadline);
+        self
+    }
+
+    pub(crate) fn deadline(&self) -> Option<std::time::Instant> {
+        self.deadline
+    }
+
+    pub(crate) fn timed_out(&self) -> bool {
+        self.deadline
+            .is_some_and(|deadline| std::time::Instant::now() >= deadline)
     }
 
     /// Returns the token used by cancel-aware async admission.
@@ -137,7 +153,7 @@ impl WorkCtx {
 
     /// Checks request cancellation before speculative generation retirement.
     pub(crate) fn check(&self) -> Result<(), WorkStop> {
-        if self.request.state.cancel.is_cancelled() {
+        if self.request.check().is_err() {
             return Err(WorkStop::RequestCancelled);
         }
         if let Some(epoch) = &self.epoch
@@ -266,6 +282,7 @@ pub(crate) enum TestStage {
     SortMerge,
     RenderUnit,
     TokenProbe,
+    ReplaceLockWait,
     BeforeFinalTokenVerify,
 }
 

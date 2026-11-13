@@ -45,7 +45,6 @@ pub(crate) struct FilePathLock {
     file: File,
 }
 
-#[cfg(test)]
 pub(crate) fn is_lock_contended(error: &std::io::Error) -> bool {
     if error.kind() == std::io::ErrorKind::WouldBlock {
         return true;
@@ -61,6 +60,7 @@ pub(crate) fn is_lock_contended(error: &std::io::Error) -> bool {
 }
 
 impl FilePathLock {
+    #[cfg(test)]
     pub(crate) fn acquire(identity: &PathIdentity, path: &Path) -> Result<Self, String> {
         let directory = super::private_storage::edit_lock_directory();
         super::private_storage::ensure_private_directory(&directory, "edit-lock")?;
@@ -75,7 +75,24 @@ impl FilePathLock {
         Ok(Self { file })
     }
 
-    #[cfg(test)]
+    pub(crate) fn acquire_cancellable(
+        identity: &PathIdentity,
+        path: &Path,
+        operation: &crate::operation::OperationCtx,
+    ) -> Result<Self, String> {
+        loop {
+            operation
+                .check()
+                .map_err(|_| "Request stopped.".to_string())?;
+            if let Some(lock) = Self::try_acquire(identity, path)? {
+                return Ok(lock);
+            }
+            #[cfg(test)]
+            operation.stage(crate::operation::TestStage::ReplaceLockWait);
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
     fn try_acquire(identity: &PathIdentity, path: &Path) -> Result<Option<Self>, String> {
         let directory = super::private_storage::edit_lock_directory();
         super::private_storage::ensure_private_directory(&directory, "edit-lock")?;
@@ -85,7 +102,7 @@ impl FilePathLock {
             Ok(()) => Ok(Some(Self { file })),
             Err(error) if is_lock_contended(&error) => Ok(None),
             Err(error) => Err(format!(
-                "Cannot try-lock {} for editing: {error}.",
+                "Cannot lock {} for editing: {error}. Retry after the other FastCtx process finishes.",
                 crate::paths::display_path(path)
             )),
         }

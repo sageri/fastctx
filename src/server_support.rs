@@ -357,6 +357,75 @@ pub(crate) async fn run_blocking(
     }
 }
 
+/// Stops edit admission cooperatively without discarding completed-write totals.
+pub(crate) async fn run_blocking_replace(
+    session: Arc<SessionContext>,
+    permits: Arc<Semaphore>,
+    mut guard: RequestWorkGuard,
+    operation_context: OperationCtx,
+    status: impl FnOnce() -> Option<BackgroundStatus> + Send + 'static,
+    operation: impl FnOnce(OperationCtx) -> ToolResponse + Send + 'static,
+) -> CallToolResult {
+    let budget_variable = crate::budget::GLOBAL_TOKEN_BUDGET_ENV;
+    let ticket = session.begin_guarded_response();
+    let cancellation = operation_context.cancellation_token().clone();
+    let deadline = operation_context
+        .deadline()
+        .expect("replace has a deadline");
+    let permit = tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => None,
+        _ = tokio::time::sleep_until(deadline.into()) => None,
+        permit = permits.acquire_owned() => match permit {
+            Ok(permit) => Some(permit),
+            Err(_) => return finish_early_response(&session, ticket, budget_variable,
+                ToolResponse::error("Internal tool failure: the blocking-operation limiter is unavailable.")),
+        }
+    };
+    let Some(permit) = permit else {
+        return finish_early_response(
+            &session,
+            ticket,
+            budget_variable,
+            crate::edit::control::stopped_response(&operation_context),
+        );
+    };
+    if operation_context.check().is_err() {
+        return finish_early_response(
+            &session,
+            ticket,
+            budget_variable,
+            crate::edit::control::stopped_response(&operation_context),
+        );
+    }
+    let failure_session = Arc::clone(&session);
+    let result = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        session.activate(|| {
+            await_test_tool_barrier();
+            let burst = BurstFormatter::new(ticket, budget_variable);
+            let decorator = BackgroundDecorator::new(status(), budget_variable);
+            let response = if operation_context.check().is_err() {
+                crate::edit::control::stopped_response(&operation_context)
+            } else {
+                operation(operation_context)
+            };
+            burst.rendered(decorator.finish(response)).deliver()
+        })
+    })
+    .await;
+    guard.disarm();
+    match result {
+        Ok(response) => into_mcp_result(response),
+        Err(error) => finish_early_response(
+            &failure_session,
+            failure_session.begin_guarded_response(),
+            budget_variable,
+            ToolResponse::error(format!("Internal tool failure: {error}")),
+        ),
+    }
+}
+
 /// Runs grep/glob work with cancel-aware admission and a drop-cancelled blocking sibling.
 pub(crate) async fn run_blocking_cancellable(
     request: CancellableBlockingRequest,

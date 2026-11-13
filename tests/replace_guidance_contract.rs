@@ -2,6 +2,26 @@ use fastctx::edit::{ReplaceRequest, ReplaceService};
 use fastctx::server::{FastCtxServer, ServerOptions};
 
 #[test]
+fn replacement_guidance_explains_deadline_and_safe_retry() {
+    let tools = FastCtxServer::new().tool_definitions();
+    let replace = tools.iter().find(|tool| tool.name == "replace").unwrap();
+    let description = replace.description.as_deref().unwrap();
+    for required in [
+        "60 seconds including queue time",
+        "cancellation",
+        "atomic commit",
+        "completed writes remain",
+        "before retrying",
+        "Serialize replacements",
+    ] {
+        assert!(
+            description.contains(required),
+            "missing {required}: {description}"
+        );
+    }
+}
+
+#[test]
 fn replacement_guidance_distinguishes_json_newlines_from_literal_backslashes() {
     let tools = FastCtxServer::with_options(ServerOptions::all()).tool_definitions();
     let replace = tools.iter().find(|tool| tool.name == "replace").unwrap();

@@ -322,6 +322,10 @@ Main parameters:
 
 Each file is checked again before commit. Writes use atomic replacement in the same directory and preserve the original encoding, BOM, line endings, trailing newline, Unix mode, and untouched bytes. Concurrent changes move the affected file into the failure report while the remaining files continue.
 
+`replace` stops cooperatively after 60 seconds, including time queued for execution, or when its MCP request is cancelled. It stops scanning, planning, waiting for locks, and starting further writes at safe checkpoints. An atomic commit already in progress or a blocking I/O call may finish after the deadline. Completed writes remain; they are not rolled back. When the response channel is available, an interrupted operation reports `Partial`, the stop reason, and the completed file/replacement totals. A disconnected or timed-out client may not receive that report, and the server cannot extend a host's shorter RPC timeout.
+
+After a timeout or interruption, use `grep` or read the affected files to verify the actual disk state before deciding whether to retry. Do not blindly repeat a replacement. Serialize multiple replacements on the same directory; concurrent edits still use the existing conflict checks.
+
 ### `run`
 
 `run` executes a Bash command in the foreground and returns merged stdout, stderr, and the exit code. It uses Git Bash on Windows and the system Bash on macOS and Linux.
