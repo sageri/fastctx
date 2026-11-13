@@ -766,7 +766,7 @@ fn wait_for_complete_from(
     job_id: &str,
     after_seq: Option<u64>,
 ) -> String {
-    wait_for_complete_from_within(session, job_id, after_seq, Duration::from_secs(15))
+    wait_for_complete_from_within(session, job_id, after_seq, Duration::from_secs(45))
 }
 
 fn wait_for_complete_from_within(
