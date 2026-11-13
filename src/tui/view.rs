@@ -3748,6 +3748,8 @@ mod tests {
                     let selected_label = [
                         app.messages().menu_apply,
                         app.messages().menu_config,
+                        app.job_messages().menu,
+                        app.update_messages().page_title,
                         app.messages().menu_status,
                         app.messages().menu_about,
                         app.messages().menu_language,
