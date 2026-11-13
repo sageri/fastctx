@@ -247,7 +247,8 @@ fn finish_early_response(
 }
 
 fn await_test_tool_barrier() {
-    #[cfg(debug_assertions)]
+    // CI runs the test suite in release profile; gate on the env variable
+    // alone so release builds still expose the barrier to tests.
     if let Ok(directory) = crate::session::var("FASTCTX_TEST_TOOL_BARRIER_DIR") {
         use std::sync::atomic::{AtomicUsize, Ordering};
 

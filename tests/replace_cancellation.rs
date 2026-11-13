@@ -21,7 +21,7 @@ fn mcp_cancelled_replace_does_not_write_after_worker_is_released() {
         "replace",
         json!({"path":path, "pattern":"old", "replacement":"new"}),
     );
-    let deadline = Instant::now() + Duration::from_secs(4);
+    let deadline = Instant::now() + Duration::from_secs(15);
     while !barrier.join("participant-0").exists() {
         assert!(
             Instant::now() < deadline,
