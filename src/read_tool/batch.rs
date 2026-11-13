@@ -25,6 +25,8 @@ struct ContinuationEntry {
     limit: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     encoding: Option<String>,
+    #[serde(skip)]
+    window_complete: bool,
 }
 
 struct PreparedEntry {
@@ -344,8 +346,10 @@ fn progress_after(
         limit: entry
             .limit
             .and_then(|limit| limit.checked_sub(shown))
-            .filter(|remaining| *remaining > 0),
+            .filter(|remaining| *remaining > 0)
+            .or(entry.limit),
         encoding: entry.encoding.clone(),
+        window_complete: shown == content.lines.len() && content.slice_complete,
     })
 }
 
@@ -400,7 +404,10 @@ fn batch_terminal(progress: &[Option<ContinuationEntry>], total: usize) -> Strin
         return format!("(Complete: {total} {noun} processed.)");
     }
     let json = serde_json::to_string(&pending).expect("continuation entries serialize");
-    let processed = total - pending.len();
+    let processed = progress
+        .iter()
+        .filter(|entry| entry.as_ref().is_none_or(|entry| entry.window_complete))
+        .count();
     format!("(Partial: {processed} of {total} entries processed. Continue with files={json}.)")
 }
 
@@ -418,6 +425,7 @@ impl ContinuationEntry {
             offset: entry.offset,
             limit: entry.limit,
             encoding: entry.encoding.clone(),
+            window_complete: false,
         }
     }
 }
