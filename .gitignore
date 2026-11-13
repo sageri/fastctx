@@ -15,3 +15,9 @@ AGENTS.md
 CLAUDE.md
 .sisyphus/
 dev-notes/
+
+# Agent scaffolding: per-machine tooling state, never published
+.agents/
+.claude/
+.cross-review/
+.scratch/
