@@ -36,7 +36,9 @@ pub(super) fn read_hex_file(
         Err(error) => return ToolResponse::error(io_error_message(path, &error)),
     };
     if file_size == 0 {
-        return ToolResponse::text("Warning: the file exists but is empty.");
+        return ToolResponse::text(
+            "Warning: the file exists but is empty.\n\n(Complete: empty file.)",
+        );
     }
     let total_lines = file_size / BYTES_PER_LINE + u64::from(file_size % BYTES_PER_LINE != 0);
     let offset_line = offset as u64;
