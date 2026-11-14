@@ -21,6 +21,8 @@ fastctx
 
 当前优先支持 ChatGPT App 与 Codex CLI。任何 MCP client 也可以直接注册 `fastctx serve`。
 
+各宿主的集成注意事项——例如 zcode 的内置 Edit 工具要求先用它自己的 Read 读过文件——汇总在[宿主兼容性说明](./docs/host-integrations.md)。
+
 ## FastCtx 解决什么
 
 编码智能体访问仓库时，经常要临时拼接 shell 命令，处理引号、转义、路径和平台差异，再从终端文本中提取真正需要的信息。一次简单的文件读取或符号搜索，也可能让模型花掉多轮工具调用来确认命令是否正确、结果是否完整。

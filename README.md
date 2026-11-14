@@ -21,6 +21,8 @@ The `fastctx` command opens the control terminal. Review the proposed changes, s
 
 FastCtx currently provides first-class setup for ChatGPT App and Codex CLI. Any MCP client can also register `fastctx serve` directly.
 
+Host-specific integration notes — for example, zcode's built-in Edit tool requiring its own Read before editing a file — are collected in [Host compatibility](./docs/host-integrations.md).
+
 ## What FastCtx solves
 
 Coding agents often assemble shell commands on the fly when they access a repository. They have to handle quotes, escaping, paths, and platform differences, then extract the useful information from terminal output. A simple file read or symbol search can take several tool calls just to confirm that the command is correct and the result is complete.
