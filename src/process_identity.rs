@@ -726,23 +726,54 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
+    fn process_exit_helper() {
+        use std::io::Read;
+        std::io::stdin().read_to_end(&mut Vec::new()).unwrap();
+    }
+
+    #[test]
     fn process_handle_wait_observes_the_exact_process_exit() {
-        #[cfg(windows)]
-        let mut child = std::process::Command::new(
-            std::env::var_os("ComSpec").unwrap_or_else(|| "cmd.exe".into()),
-        )
-        .args(["/D", "/Q", "/C", "ping -n 2 127.0.0.1 >NUL"])
-        .spawn()
-        .unwrap();
-        #[cfg(unix)]
-        let mut child = std::process::Command::new("/bin/sh")
-            .args(["-c", "sleep 0.2"])
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--ignored",
+                "--exact",
+                "process_identity::tests::process_exit_helper",
+            ])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
             .spawn()
             .unwrap();
         let identity = process_identity(child.id()).unwrap();
         let cancelled = AtomicBool::new(false);
-        assert!(wait_for_identity_exit_until(&identity, &cancelled));
-        assert!(child.wait().unwrap().success());
+        let (finished, completion) = std::sync::mpsc::channel();
+        let exited = std::thread::scope(|scope| {
+            let cancellation = &cancelled;
+            scope.spawn(move || {
+                if completion
+                    .recv_timeout(std::time::Duration::from_secs(10))
+                    .is_err()
+                {
+                    cancellation.store(true, std::sync::atomic::Ordering::Release);
+                }
+            });
+            drop(child.stdin.take());
+            let exited = wait_for_identity_exit_until(&identity, &cancelled);
+            let _ = finished.send(());
+            exited
+        });
+        if !exited {
+            let _ = child.kill();
+        }
+        let output = child.wait_with_output().unwrap();
+        assert!(exited, "process exit wait timed out");
+        assert!(
+            output.status.success(),
+            "helper exited with {}; stderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[cfg(target_os = "macos")]
