@@ -184,7 +184,7 @@ fn foreground_timeout_kills_descendants_and_keeps_captured_output() {
     assert_eq!(response["result"]["isError"], false);
     assert_eq!(
         mcp_text(&response),
-        "started\n\n(Partial: timed out after 2000 ms and the process tree was killed; 1 line captured. Increase timeout_ms or use run_background.)"
+        "started\n\n(Partial: timed out after 2000 ms and the process tree was killed; all 1 captured line shown. Execution ended; this run cannot resume. No persistent output or job_id is available; omitted output cannot be retrieved with job_output or pagination. For a new invocation, consider a larger timeout_ms, run_background, or redirecting output to a file.)"
     );
     assert!(
         spawned.exists(),
@@ -195,6 +195,114 @@ fn foreground_timeout_kills_descendants_and_keeps_captured_output() {
         !marker.exists(),
         "a timed-out descendant survived the tree kill"
     );
+    assert!(session.close().success());
+}
+
+#[test]
+fn foreground_timeout_reports_terminal_execution_and_output_retrievability() {
+    let _serial = shell_contract_guard();
+    for (name, prefix, expected) in [
+        ("silent", "", "no output captured"),
+        (
+            "captured",
+            "printf 'CASE7\\n'; ",
+            "all 1 captured line shown",
+        ),
+        (
+            "window",
+            "for ((i=0;i<2000;i++)); do printf 'CASE7_%04d abcdefghijklmnopqrstuvwxyz\\n' \"$i\"; done; ",
+            "output truncated",
+        ),
+        (
+            "long",
+            "printf '%03000d\\n' 0; ",
+            "long lines were truncated at 2000 chars",
+        ),
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let heartbeat = temp.path().join("heartbeat.txt");
+        let mut session = shell_session(temp.path(), Some("1000"));
+        // 有限ループにして、異常終了時にも子プロセスが残り続けないようにする。
+        let response = session.call_with_timeout(
+            "run",
+            serde_json::json!({
+                "command": format!("{prefix}(for ((i=0;i<60;i++)); do printf tick >> {}; sleep 0.1; done) & wait", bash_quote(&heartbeat)),
+                "timeout_ms": 2000,
+                "login_shell": false
+            }),
+            Duration::from_secs(20),
+        );
+        assert_eq!(response["result"]["isError"], false, "{name}: {response}");
+        let text = mcp_text(&response);
+        let captured = std::fs::read(&heartbeat).expect("descendant must actually start");
+        assert!(!captured.is_empty());
+        std::thread::sleep(Duration::from_millis(600));
+        assert_eq!(captured, std::fs::read(&heartbeat).unwrap(), "{name}");
+        let jobs = session.call("job_list", serde_json::json!({"status": "all"}));
+        assert!(mcp_text(&jobs).contains("no jobs"), "{jobs}");
+        assert!(session.close().success());
+        assert!(
+            text.contains("timed out after 2000 ms and the process tree was killed"),
+            "{name}: {text}"
+        );
+        assert!(text.contains(expected), "{name}: {text}");
+        assert_eq!(
+            text.contains("showing the first"),
+            name == "window",
+            "{name}: {text}"
+        );
+        assert_eq!(
+            text.contains("all 1 captured line shown"),
+            name == "captured",
+            "{name}: {text}"
+        );
+        assert!(
+            text.contains("Execution ended; this run cannot resume"),
+            "{name}: {text}"
+        );
+        assert!(
+            text.contains("No persistent output or job_id"),
+            "{name}: {text}"
+        );
+        assert!(
+            text.contains("cannot be retrieved with job_output or pagination"),
+            "{name}: {text}"
+        );
+        assert!(text.contains("For a new invocation"), "{name}: {text}");
+        assert!(
+            fastctx::budget::estimate_tokens(text) <= 1000,
+            "{name}: {text}"
+        );
+    }
+}
+
+#[test]
+fn foreground_timeout_reports_ring_loss_within_budget() {
+    let _serial = shell_contract_guard();
+    let temp = tempfile::tempdir().unwrap();
+    let mut session = shell_session(temp.path(), Some("1000"));
+    let response = session.call_with_timeout(
+        "run",
+        serde_json::json!({
+            "command": "printf -v payload '%01000d' 0; yes \"$payload\" | head -n 9000; sleep 20",
+            "timeout_ms": 10000,
+            "login_shell": false
+        }),
+        Duration::from_secs(60),
+    );
+    let text = mcp_text(&response);
+    assert_eq!(response["result"]["isError"], false, "{text}");
+    assert!(
+        text.contains("dropped from the buffer and cannot be retrieved"),
+        "{text}"
+    );
+    assert!(text.contains("timed out after 10000 ms"), "{text}");
+    assert!(
+        text.contains("Execution ended; this run cannot resume"),
+        "{text}"
+    );
+    assert!(text.contains("No persistent output or job_id"), "{text}");
+    assert!(fastctx::budget::estimate_tokens(text) <= 1000, "{text}");
     assert!(session.close().success());
 }
 

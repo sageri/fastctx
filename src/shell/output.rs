@@ -59,7 +59,7 @@ pub(crate) fn capture_foreground(mut reader: impl Read) -> std::io::Result<Captu
 pub(crate) fn validate_run_budget(timeout_ms: u64) -> Result<TokenBudget, String> {
     let maximum = u64::MAX;
     let drop_note = dropped_note(maximum).expect("a positive count always creates a note");
-    let ring_loss_terminal = window_terminal(i32::MIN, None, 0, 0, maximum);
+    let ring_loss_terminal = window_terminal(i32::MIN, Some(timeout_ms), 0, 0, maximum);
     let ring_loss = compose_response(
         Some(&drop_note),
         &[format!("... [{maximum} lines omitted] ...")],
@@ -76,15 +76,10 @@ pub(crate) fn validate_run_budget(timeout_ms: u64) -> Result<TokenBudget, String
             "(Partial: showing the first 0 and last 0 of {maximum} lines; exited {}.)",
             i32::MIN
         ),
-        format!(
-            "(Partial: timed out after {timeout_ms} ms and the process tree was killed; no output captured. Increase timeout_ms or use run_background.)"
-        ),
-        format!(
-            "(Partial: timed out after {timeout_ms} ms and the process tree was killed; {maximum} lines captured. Increase timeout_ms or use run_background.)"
-        ),
-        format!(
-            "(Partial: timed out after {timeout_ms} ms and the process tree was killed; showing the first 0 and last 0 of {maximum} captured lines. Increase timeout_ms or use run_background.)"
-        ),
+        full_terminal(i32::MIN, Some(timeout_ms), 0, false),
+        full_terminal(i32::MIN, Some(timeout_ms), maximum, false),
+        full_terminal(i32::MIN, Some(timeout_ms), maximum, true),
+        window_terminal(i32::MIN, Some(timeout_ms), 0, 0, maximum),
         ring_loss,
     ];
     let required = candidates
@@ -200,6 +195,8 @@ fn format_foreground_with_budget(
     }
 }
 
+const TIMEOUT_NEXT_STEPS: &str = "Execution ended; this run cannot resume. No persistent output or job_id is available; omitted output cannot be retrieved with job_output or pagination. For a new invocation, consider a larger timeout_ms, run_background, or redirecting output to a file.";
+
 fn full_terminal(
     exit_code: i32,
     timeout_ms: Option<u64>,
@@ -208,10 +205,14 @@ fn full_terminal(
 ) -> String {
     match timeout_ms {
         Some(timeout) if total == 0 => format!(
-            "(Partial: timed out after {timeout} ms and the process tree was killed; no output captured. Increase timeout_ms or use run_background.)"
+            "(Partial: timed out after {timeout} ms and the process tree was killed; no output captured. {TIMEOUT_NEXT_STEPS})"
+        ),
+        Some(timeout) if had_truncation => format!(
+            "(Partial: timed out after {timeout} ms and the process tree was killed; {total} {} captured, but one or more long lines were truncated at 2000 chars. {TIMEOUT_NEXT_STEPS})",
+            plural(total, "line", "lines")
         ),
         Some(timeout) => format!(
-            "(Partial: timed out after {timeout} ms and the process tree was killed; {total} {} captured. Increase timeout_ms or use run_background.)",
+            "(Partial: timed out after {timeout} ms and the process tree was killed; all {total} captured {} shown. {TIMEOUT_NEXT_STEPS})",
             plural(total, "line", "lines")
         ),
         None if total == 0 => format!("(Complete: exited {exit_code}; no output.)"),
@@ -238,7 +239,7 @@ fn window_terminal(
             "(Partial: showing the first {first} and last {last} of {total} lines; exited {exit_code}.)"
         ),
         Some(timeout) => format!(
-            "(Partial: timed out after {timeout} ms and the process tree was killed; showing the first {first} and last {last} of {total} captured lines. Increase timeout_ms or use run_background.)"
+            "(Partial: timed out after {timeout} ms and the process tree was killed; showing the first {first} and last {last} of {total} captured lines; output truncated. {TIMEOUT_NEXT_STEPS})"
         ),
     }
 }
