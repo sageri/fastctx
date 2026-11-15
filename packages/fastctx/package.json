@@ -6,10 +6,10 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yc-duan/fastctx.git"
+    "url": "git+https://github.com/sageri/fastctx.git"
   },
-  "homepage": "https://github.com/yc-duan/fastctx#readme",
-  "bugs": "https://github.com/yc-duan/fastctx/issues",
+  "homepage": "https://github.com/sageri/fastctx#readme",
+  "bugs": "https://github.com/sageri/fastctx/issues",
   "engines": {
     "node": ">=18"
   },

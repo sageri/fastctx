@@ -5,7 +5,7 @@ requests are all welcome.
 
 ## Reporting issues
 
-Open an issue at <https://github.com/yc-duan/fastctx/issues>. For bugs, please
+Open an issue at <https://github.com/sageri/fastctx/issues>. For bugs, please
 include the platform, the FastCtx version, and steps to reproduce.
 
 ## Development

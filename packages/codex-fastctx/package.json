@@ -4,9 +4,9 @@
   "description": "Compatibility alias for FastCtx",
   "author": "yc-duan <dy2958830371@gmail.com>",
   "license": "Apache-2.0",
-  "repository": "github:yc-duan/fastctx",
-  "homepage": "https://github.com/yc-duan/fastctx#readme",
-  "bugs": "https://github.com/yc-duan/fastctx/issues",
+  "repository": "github:sageri/fastctx",
+  "homepage": "https://github.com/sageri/fastctx#readme",
+  "bugs": "https://github.com/sageri/fastctx/issues",
   "bin": {
     "fastctx": "launcher.js"
   },

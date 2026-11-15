@@ -1,7 +1,7 @@
 # codex-fastctx
 
 Compatibility package name for
-[FastCtx](https://github.com/yc-duan/fastctx) — structured repository tools
+[FastCtx](https://github.com/sageri/fastctx) — structured repository tools
 for coding agents, Codex first. It contains no binary or install script; its
 tiny command shim forwards directly to the `fastctx` dependency, installing
 the same `fastctx` command. The shim also identifies this compatibility package

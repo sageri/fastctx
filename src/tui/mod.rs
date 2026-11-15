@@ -352,10 +352,10 @@ mod tests {
                     target_version: "99.88.77".to_string(),
                     archive_name: "fixture.zip".to_string(),
                     archive_url:
-                        "https://github.com/yc-duan/fastctx/releases/download/v99.88.77/fixture.zip"
+                        "https://github.com/sageri/fastctx/releases/download/v99.88.77/fixture.zip"
                             .to_string(),
                     checksums_url:
-                        "https://github.com/yc-duan/fastctx/releases/download/v99.88.77/SHA256SUMS"
+                        "https://github.com/sageri/fastctx/releases/download/v99.88.77/SHA256SUMS"
                             .to_string(),
                 },
             )))

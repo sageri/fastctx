@@ -94,4 +94,4 @@ and shows exact start plus live elapsed time. Finished output remains available
 to the agent through `job_output`; the host does not expose conversation titles
 or ids to MCP, so FastCtx does not invent them.
 
-Full documentation: https://github.com/yc-duan/fastctx
+Full documentation: https://github.com/sageri/fastctx
