@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 const BEGIN_MARKER: &str = "<!-- fastctx:begin -->";
 const END_MARKER: &str = "<!-- fastctx:end -->";
-pub(crate) const MANAGED_SECTION_CONTRACT_ID: &str = "guidance-v4";
+pub(crate) const MANAGED_SECTION_CONTRACT_ID: &str = "guidance-v5";
 const LEGACY_BEGIN_MARKER: &str = "<!-- fastread:begin -->";
 const LEGACY_END_MARKER: &str = "<!-- fastread:end -->";
 const LEGACY_FASTREAD_SECTION: &str = concat!(
@@ -32,19 +32,16 @@ const FILE_GUIDANCE_PREFIX: &str = concat!(
     "equivalents such as `cat`/`Get-Content`, `rg`/`findstr`/`Select-String`,\n",
     "and `dir`/`ls -R`.\n",
 );
+// `replace`'s guarantees live in its tool description; repeating them here doubles their context load.
 const FILE_GUIDANCE_SUFFIX: &str = concat!(
-    "Read only what the task needs. When you need several files, pass them to\n",
-    "one `inspect_local_file` call as files=[{\"path\": ...}, ...] instead of one\n",
-    "call per file. The last line of every result says `Complete` or\n",
-    "`Partial` — continue only with the exact parameters a `Partial` note\n",
-    "provides.\n",
+    "For several files, make one `inspect_local_file` call with\n",
+    "files=[{\"path\": ...}, ...]. When a result ends `Partial`, continue only\n",
+    "with the exact parameters its note provides.\n",
     "\n",
     "### Batch replacement\n",
     "\n",
-    "Use FastCtx's `replace` for mechanical find-and-replace across files.\n",
-    "It preserves each file's encoding and line endings, supports dry-run previews,\n",
-    "and rejects concurrent changes before writing. Use apply_patch for generated\n",
-    "content, semantic rewrites, or small local edits.\n"
+    "Use FastCtx's `replace` for mechanical find-and-replace across files; use\n",
+    "apply_patch for generated content, semantic rewrites, or small local edits.\n"
 );
 const SHELL_GUIDANCE: &str = concat!(
     "### Shell commands\n",
@@ -143,6 +140,49 @@ const V024_READ_TOOL_NAME_FILE_GUIDANCE: &str = concat!(
 // bytes. Keep the alias rather than a second copy: the frozen hashes below cover both names, and
 // a copy would let one drift while the other stayed put.
 const V024_READ_TOOL_NAME_SHELL_GUIDANCE: &str = V022_RESOURCE_ROUTING_SHELL_GUIDANCE;
+const V025_INSPECT_TOOL_FILE_GUIDANCE: &str = concat!(
+    "## Local file inspection\n",
+    "\n",
+    "For reading, searching, and finding local files, prefer the FastCtx MCP\n",
+    "server's own tools — `inspect_local_file`, `grep`, and `glob` — over shell\n",
+    "equivalents such as `cat`/`Get-Content`, `rg`/`findstr`/`Select-String`,\n",
+    "and `dir`/`ls -R`.\n",
+    "Use FastCtx file tools directly for local-file operations, including when a\n",
+    "local reference is URI-shaped; pass the equivalent plain absolute filesystem path.\n",
+    "Read only what the task needs. When you need several files, pass them to\n",
+    "one `inspect_local_file` call as files=[{\"path\": ...}, ...] instead of one\n",
+    "call per file. The last line of every result says `Complete` or\n",
+    "`Partial` — continue only with the exact parameters a `Partial` note\n",
+    "provides.\n",
+    "\n",
+    "### Batch replacement\n",
+    "\n",
+    "Use FastCtx's `replace` for mechanical find-and-replace across files.\n",
+    "It preserves each file's encoding and line endings, supports dry-run previews,\n",
+    "and rejects concurrent changes before writing. Use apply_patch for generated\n",
+    "content, semantic rewrites, or small local edits.\n"
+);
+// A frozen copy, not an alias of `SHELL_GUIDANCE`: that one is live and may change.
+const V025_INSPECT_TOOL_SHELL_GUIDANCE: &str = concat!(
+    "### Shell commands\n",
+    "\n",
+    "Prefer FastCtx's `run` over the built-in shell for terminal work: it\n",
+    "executes with bash (Git Bash on Windows), so always write POSIX bash —\n",
+    "never PowerShell syntax.\n",
+    "\n",
+    "Never pass `apply_patch` to FastCtx's `run`: it is not a program and\n",
+    "no shell can run it. Reach it through Codex itself — as its own tool\n",
+    "call, or in Codex's built-in shell — never through the FastCtx tools.\n",
+    "\n",
+    "Commands must be non-interactive (no TTY): use flags like -y\n",
+    "or --no-edit, and expect editors/pagers to be disabled. For anything\n",
+    "that may outlast run's four-minute maximum, use `run_background`, check\n",
+    "on it with `job_output`, and stop it with `job_kill`. Background jobs run\n",
+    "independently of this session and survive restarts; rediscover an earlier\n",
+    "job with `job_list` and read its output by job_id. A non-zero exit code is\n",
+    "a normal result. The last line of every result says `Complete` or\n",
+    "`Partial`.\n"
+);
 
 /// One byte-frozen managed block from a superseded release.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -151,14 +191,32 @@ pub(crate) enum KnownLegacyGuidance {
     ResourceRouting,
     /// 0.2.4, superseded when the file-inspection tool was renamed away from `read`.
     ReadToolName,
+    /// 0.2.5–0.2.7 (`guidance-v4`), superseded when duplicated tool-description prose was pruned.
+    InspectToolName,
 }
 
 impl KnownLegacyGuidance {
     /// Every superseded release this build still recognises, newest first.
-    pub(crate) const ALL: [Self; 2] = [Self::ReadToolName, Self::ResourceRouting];
+    pub(crate) const ALL: [Self; 3] = [
+        Self::InspectToolName,
+        Self::ReadToolName,
+        Self::ResourceRouting,
+    ];
+
+    /// Contract id an Apply receipt from this release records; earlier releases recorded none.
+    fn contract_id(self) -> Option<&'static str> {
+        match self {
+            Self::InspectToolName => Some("guidance-v4"),
+            Self::ReadToolName | Self::ResourceRouting => None,
+        }
+    }
 
     fn guidance(self) -> (&'static str, &'static str) {
         match self {
+            Self::InspectToolName => (
+                V025_INSPECT_TOOL_FILE_GUIDANCE,
+                V025_INSPECT_TOOL_SHELL_GUIDANCE,
+            ),
             Self::ResourceRouting => (
                 V022_RESOURCE_ROUTING_FILE_GUIDANCE,
                 V022_RESOURCE_ROUTING_SHELL_GUIDANCE,
@@ -376,6 +434,25 @@ pub(crate) fn classify_managed_section(
     }
 }
 
+/// Whether the managed block is exactly what the release that wrote `receipt_contract_id` applied,
+/// i.e. superseded but untouched since Apply, and therefore safe for a product update to refresh.
+pub(crate) fn legacy_matches_receipt(
+    bytes: &[u8],
+    fastshell_enabled: bool,
+    receipt_contract_id: Option<&str>,
+) -> bool {
+    let Ok(source) = std::str::from_utf8(bytes) else {
+        return false;
+    };
+    let Ok(Some((start, end))) = section_range(source) else {
+        return false;
+    };
+    KnownLegacyGuidance::ALL.iter().any(|legacy| {
+        legacy.contract_id() == receipt_contract_id
+            && source[start..end] == legacy.section(fastshell_enabled)
+    })
+}
+
 pub(crate) fn refresh_known_legacy_section(
     bytes: &[u8],
     fastshell_enabled: bool,
@@ -457,4 +534,68 @@ fn marker_range(
     }
     let end = end_start + end_marker.len();
     Ok(Some((start, end)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn agents_with(section: &str) -> Vec<u8> {
+        format!("# user notes\n\n{section}\n").into_bytes()
+    }
+
+    #[test]
+    fn legacy_refresh_is_allowed_only_for_the_receipt_that_wrote_it() {
+        for shell in [false, true] {
+            let v4 = agents_with(&KnownLegacyGuidance::InspectToolName.section(shell));
+            assert!(legacy_matches_receipt(&v4, shell, Some("guidance-v4")));
+            assert!(!legacy_matches_receipt(&v4, shell, None));
+
+            let v024 = agents_with(&KnownLegacyGuidance::ReadToolName.section(shell));
+            assert!(legacy_matches_receipt(&v024, shell, None));
+            assert!(!legacy_matches_receipt(&v024, shell, Some("guidance-v4")));
+
+            let current = agents_with(&section(shell));
+            assert!(!legacy_matches_receipt(
+                &current,
+                shell,
+                Some(MANAGED_SECTION_CONTRACT_ID)
+            ));
+            assert_eq!(
+                classify_managed_section(&v4, shell),
+                ManagedSectionState::KnownLegacy
+            );
+        }
+    }
+
+    #[test]
+    fn frozen_v4_matches_the_bytes_v027_emitted() {
+        use sha2::{Digest, Sha256};
+        // Hashes of what v0.2.7's `section()` produced, computed from the v0.2.7 tag's sources.
+        for (shell, expected) in [
+            (
+                false,
+                "1a3b5e295d0118800eb5812f7f3357f7bf298aa315a1bf3e4d13654666ab0c00",
+            ),
+            (
+                true,
+                "6a0bdd0cc6595060ca2e83302d0982236d16abe08c49921eb666f5924cbb1514",
+            ),
+        ] {
+            let frozen = KnownLegacyGuidance::InspectToolName.section(shell);
+            assert_eq!(hex::encode(Sha256::digest(frozen.as_bytes())), expected);
+        }
+    }
+
+    #[test]
+    fn current_section_is_not_a_frozen_release() {
+        for shell in [false, true] {
+            let current = section(shell);
+            assert!(
+                KnownLegacyGuidance::ALL
+                    .iter()
+                    .all(|legacy| legacy.section(shell) != current)
+            );
+        }
+    }
 }
