@@ -300,9 +300,15 @@ pub(crate) fn synchronize_applied_guidance(
         agents::ManagedSectionState::Current => Ok(AppliedGuidanceSync::ApplyRequired(
             agents::ManagedSectionState::Current,
         )),
-        agents::ManagedSectionState::KnownLegacy if record.agents_contract_id.is_some() => {
-            // Released legacy receipts predate this field. Any stamped receipt paired with legacy
-            // bytes is post-Apply drift, so preserve it and keep the required action visible.
+        agents::ManagedSectionState::KnownLegacy
+            if !agents::legacy_matches_receipt(
+                &original,
+                record.fastshell_enabled,
+                record.agents_contract_id.as_deref(),
+            ) =>
+        {
+            // Legacy bytes from a release other than the one the receipt records are post-Apply
+            // drift, so preserve them and keep the required action visible.
             Ok(AppliedGuidanceSync::ApplyRequired(
                 agents::ManagedSectionState::KnownLegacy,
             ))

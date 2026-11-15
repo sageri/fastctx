@@ -1056,10 +1056,17 @@ fn check_agents(paths: &ControlPaths, applied: Option<&settings::AppliedRecord>)
                 || classify_unowned_agents(&bytes),
                 |record| agents::classify_managed_section(&bytes, record.fastshell_enabled),
             );
-            check_agents_state(paths, applied, state)
+            let legacy_matches_receipt = applied.is_some_and(|record| {
+                agents::legacy_matches_receipt(
+                    &bytes,
+                    record.fastshell_enabled,
+                    record.agents_contract_id.as_deref(),
+                )
+            });
+            check_agents_state(paths, applied, state, legacy_matches_receipt)
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            check_agents_state(paths, applied, agents::ManagedSectionState::Missing)
+            check_agents_state(paths, applied, agents::ManagedSectionState::Missing, false)
         }
         Err(error) => DoctorCheck::fail(
             "AGENTS guidance",
@@ -1088,6 +1095,7 @@ fn check_agents_state(
     paths: &ControlPaths,
     applied: Option<&settings::AppliedRecord>,
     state: agents::ManagedSectionState,
+    legacy_matches_receipt: bool,
 ) -> DoctorCheck {
     let has_receipt = applied.is_some();
     match state {
@@ -1110,12 +1118,10 @@ fn check_agents_state(
             "AGENTS guidance",
             "State: current without an Apply receipt. Automatic updates will not claim ownership; run fastctx apply to record the connection, then restart Codex.",
         ),
-        agents::ManagedSectionState::KnownLegacy
-            if applied.is_some_and(|record| record.agents_contract_id.is_some()) =>
-        {
+        agents::ManagedSectionState::KnownLegacy if has_receipt && !legacy_matches_receipt => {
             DoctorCheck::fail(
                 "AGENTS guidance",
-                "State: superseded guidance after Apply. The receipt already records a guidance contract, so these bytes are post-Apply drift and automatic updates preserve them.",
+                "State: superseded guidance after Apply. The receipt does not record the contract that wrote these bytes, so they are post-Apply drift and automatic updates preserve them.",
                 "Run fastctx apply to replace the managed block and record the complete connection, then restart Codex.",
             )
         }
