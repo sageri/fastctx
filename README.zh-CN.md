@@ -4,6 +4,9 @@
 
 ### 面向 AI 智能体的快速、上下文高效的仓库工具。
 
+> [!NOTE]
+> **维护状态**：本仓库是 [yc-duan/fastctx](https://github.com/yc-duan/fastctx) 的 fork。上游已转向另外的赛道，不再继续更新本项目，部分已知 bug 一直无人修正。本仓库修复了这些 bug，并继续维护。如果你遇到 bug，欢迎[提 issue](https://github.com/sageri/fastctx/issues) 反馈，我会持续跟进维护。
+
 FastCtx 是一个纯本地的 Rust 工具运行时，通过 MCP 提供文件读取、内容搜索、文件查找、批量替换和 Bash 命令执行能力。
 
 仓库操作由常驻进程完成，输入参数和返回结果都有稳定结构。模型可以用更少的步骤取得所需上下文，并把精力留给代码理解、修改决策和结果验证。

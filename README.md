@@ -4,6 +4,9 @@
 
 ### Fast, context-efficient repository tools for AI agents.
 
+> [!NOTE]
+> **Maintenance status.** This repository is a fork of [yc-duan/fastctx](https://github.com/yc-duan/fastctx). The original project has moved on to a different direction and is no longer updated, leaving several known bugs unfixed. This fork fixes those bugs and continues the maintenance. If you run into a bug, please [open an issue](https://github.com/sageri/fastctx/issues) — it will be maintained here.
+
 FastCtx is a local Rust tool runtime. It provides file reading, content search, file discovery, batch replacement, and Bash command execution through MCP.
 
 Repository operations run in a persistent process with stable input schemas and output formats. The model can gather the context it needs in fewer steps and spend more attention on understanding code, planning changes, and verifying results.
