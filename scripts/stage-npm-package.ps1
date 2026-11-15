@@ -93,7 +93,8 @@ function Pack-CheckedPackage([string]$Directory, [string[]]$AllowedFiles) {
         $json = (& npm pack --json --pack-destination $destination | Out-String)
         if ($LASTEXITCODE -ne 0) { throw "npm pack failed for $Directory" }
         $result = $json | ConvertFrom-Json
-        $actual = @($result[0].files | ForEach-Object { $_.path })
+        $package = if ($result -is [Array]) { $result[0] } else { $result.PSObject.Properties.Value | Select-Object -First 1 }
+        $actual = @($package.files | ForEach-Object { $_.path })
         foreach ($path in $actual) {
             if ($path -notin $AllowedFiles) {
                 throw "Unexpected file in npm tarball for $Directory`: $path"
@@ -104,7 +105,7 @@ function Pack-CheckedPackage([string]$Directory, [string[]]$AllowedFiles) {
                 throw "Missing file in npm tarball for $Directory`: $path"
             }
         }
-        $result[0]
+        $package
     } finally {
         Pop-Location
     }

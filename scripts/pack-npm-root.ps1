@@ -37,14 +37,15 @@ function Pack-CheckedPackage([string]$Name, [string[]]$AllowedFiles) {
         $json = (& npm pack --json --pack-destination $destination | Out-String)
         if ($LASTEXITCODE -ne 0) { throw "npm pack failed for $Name" }
         $result = $json | ConvertFrom-Json
-        $actual = @($result[0].files | ForEach-Object { $_.path })
+        $package = if ($result -is [Array]) { $result[0] } else { $result.PSObject.Properties.Value | Select-Object -First 1 }
+        $actual = @($package.files | ForEach-Object { $_.path })
         foreach ($path in $actual) {
             if ($path -notin $AllowedFiles) { throw "Unexpected file in $Name tarball: $path" }
         }
         foreach ($path in $AllowedFiles) {
             if ($path -notin $actual) { throw "Missing file in $Name tarball: $path" }
         }
-        $result[0]
+        $package
     } finally {
         Pop-Location
     }
