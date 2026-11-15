@@ -1612,9 +1612,7 @@ fn validate_release_url(value: &str) -> Result<(), String> {
     let url = Url::parse(value).map_err(|error| format!("invalid release URL: {error}"))?;
     if url.scheme() != "https"
         || url.host_str() != Some("github.com")
-        || !url
-            .path()
-            .starts_with("/sageri/fastctx/releases/download/")
+        || !url.path().starts_with("/sageri/fastctx/releases/download/")
     {
         return Err("release URL is outside sageri/fastctx".to_string());
     }
@@ -1624,9 +1622,7 @@ fn validate_release_url(value: &str) -> Result<(), String> {
 fn validate_download_response_url(value: &str) -> Result<(), String> {
     let url = Url::parse(value).map_err(|error| format!("invalid download URL: {error}"))?;
     let allowed = match url.host_str() {
-        Some("github.com") => url
-            .path()
-            .starts_with("/sageri/fastctx/releases/download/"),
+        Some("github.com") => url.path().starts_with("/sageri/fastctx/releases/download/"),
         Some("release-assets.githubusercontent.com" | "objects.githubusercontent.com") => true,
         _ => false,
     };
