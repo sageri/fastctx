@@ -37,7 +37,13 @@ function Pack-CheckedPackage([string]$Name, [string[]]$AllowedFiles) {
         $json = (& npm pack --json --pack-destination $destination | Out-String)
         if ($LASTEXITCODE -ne 0) { throw "npm pack failed for $Name" }
         $result = $json | ConvertFrom-Json
-        $package = if ($result -is [Array]) { $result[0] } else { $result.PSObject.Properties.Value | Select-Object -First 1 }
+        $package = if ($result -is [Array]) {
+            $result[0]
+        } elseif ($result.files) {
+            $result
+        } else {
+            $result.PSObject.Properties.Value | Where-Object { $_.files } | Select-Object -First 1
+        }
         $actual = @($package.files | ForEach-Object { $_.path })
         foreach ($path in $actual) {
             if ($path -notin $AllowedFiles) { throw "Unexpected file in $Name tarball: $path" }

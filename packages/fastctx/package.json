@@ -1,6 +1,6 @@
 {
   "name": "fastctx",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "FastCtx — fast, context-efficient repository tools for AI agents.",
   "author": "yc-duan <dy2958830371@gmail.com>",
   "license": "Apache-2.0",
@@ -22,11 +22,11 @@
     "licenses/**"
   ],
   "optionalDependencies": {
-    "@fastctx/win32-x64": "0.2.7",
-    "@fastctx/win32-arm64": "0.2.7",
-    "@fastctx/linux-x64": "0.2.7",
-    "@fastctx/darwin-x64": "0.2.7",
-    "@fastctx/darwin-arm64": "0.2.7"
+    "@fastctx/win32-x64": "0.2.8",
+    "@fastctx/win32-arm64": "0.2.8",
+    "@fastctx/linux-x64": "0.2.8",
+    "@fastctx/darwin-x64": "0.2.8",
+    "@fastctx/darwin-arm64": "0.2.8"
   },
   "publishConfig": {
     "access": "public"
